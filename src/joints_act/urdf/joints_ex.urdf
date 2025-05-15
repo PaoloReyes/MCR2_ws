@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+
+<robot name="multiple_joints_example">
+
+    <link name="link1"/>
+    <link name="link2"/>
+    <link name="link3"/>
+    <link name="link4"/>
+    <link name="link5"/>
+    <link name="link6"/>
+
+    <joint name="joint_fixed" type="fixed">
+        <parent link="link1"/>
+        <child link="link2"/>
+        <origin xyz="1 1 1" rpy="0 0 0"/>
+    </joint>
+
+    <joint name="joint_revolute" type="revolute">
+        <parent link="link2"/>
+        <child link="link3"/>
+        <origin xyz="0.5 0.5 0" rpy="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <limit lower="-0.785" upper="0.785" effort="5.0" velocity="0.1"/>
+    </joint>
+
+    <joint name="joint_prismatic" type="prismatic">
+        <parent link="link1"/>
+        <child link="link4"/>
+        <origin xyz="-1 -1 0" rpy="1.57 0 0"/>
+        <axis xyz="1 0 0"/>
+        <limit lower="-2" upper="2" effort="5.0" velocity="0.1"/>
+    </joint>
+
+    <joint name="joint_continuous_1" type="continuous">
+        <parent link="link4"/>
+        <child link="link5"/>
+        <origin xyz="0.5 0.5 0" rpy="0 0 0"/>
+        <axis xyz="1 0 0"/>
+    </joint>
+
+    <joint name="joint_continuous_2" type="continuous">
+        <parent link="link5"/>
+        <child link="link6"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <axis xyz="0.707 0.707 0.707"/>
+    </joint>
+
+</robot>
