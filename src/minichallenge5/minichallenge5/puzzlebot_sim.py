@@ -2,13 +2,14 @@ import minichallenge4.utils.puzzlebot_kinematics as puzzlebot_kinematics
 import numpy as np
 import rclpy
 
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
+from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Float32
 
 class PuzzlebotSim(Node):
     def __init__(self):
-        super().__init__('puzzlebot_sim_node')
+        super().__init__('puzzlebot_sim')
 
         # Robot parameters declaration
         self.declare_parameter('wheel_radius', 0.05)
@@ -18,11 +19,11 @@ class PuzzlebotSim(Node):
         l = self.get_parameter('wheel_base').get_parameter_value().double_value
 
         # Subscribers
-        self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 10)
+        self.create_subscription(Odometry, 'gz_odom', self.cmd_vel_callback, 10)
         
         # Publishers
-        self.right_wheel_speed_publisher = self.create_publisher(Float32, 'wr', 10)
-        self.left_wheel_speed_publisher = self.create_publisher(Float32, 'wl', 10)
+        self.right_wheel_speed_publisher = self.create_publisher(Float32, 'VelocityEncR', qos_profile_sensor_data)
+        self.left_wheel_speed_publisher = self.create_publisher(Float32, 'VelocityEncL', qos_profile_sensor_data)
         
         # Node variables
         self.inverse_puzzlebot_kinematic_model = puzzlebot_kinematics.get_inverse_puzzlebot_kinematic_model(r, l)
@@ -32,8 +33,8 @@ class PuzzlebotSim(Node):
 
     def cmd_vel_callback(self, msg):
         # Update the robot speeds
-        linear_speed = msg.linear.x
-        angular_speed = msg.angular.z
+        linear_speed = msg.twist.twist.linear.x
+        angular_speed = msg.twist.twist.angular.z
 
         # Obtain the wheel speeds based on the inverse kinematic model
         wheels_speeds = self.inverse_puzzlebot_kinematic_model @ np.array([linear_speed, angular_speed])

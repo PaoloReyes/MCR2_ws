@@ -12,4 +12,9 @@ def get_linearized_puzzlebot_model_matrix(v, theta, delta):
                      [0, 1,  v*np.cos(theta)*delta],
                      [0, 0,           1           ]])
 
+def get_linearized_puzzlebot_input_model_matrix(r, l, theta, delta):
+    return (1/2*r*delta) * np.array([[np.cos(theta), np.cos(theta)],
+                                    [np.sin(theta), np.sin(theta)],
+                                    [     2/l,          -2/l     ]])
+
 speeds_decomposer = lambda v, w, theta: np.array([v * np.cos(theta), v * np.sin(theta), w])

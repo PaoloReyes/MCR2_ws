@@ -1,10 +1,11 @@
-import minichallenge4.utils.puzzlebot_kinematics as puzzlebot_kinematics
+import minichallenge5.utils.puzzlebot_kinematics as puzzlebot_kinematics
 import numpy as np
 import rclpy
 import transforms3d as t3d
 
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Float32
 
 class Localization(Node):
@@ -18,17 +19,21 @@ class Localization(Node):
         self.declare_parameter('initial_pose.x', 0.0)
         self.declare_parameter('initial_pose.y', 0.0)
         self.declare_parameter('initial_pose.theta', 0.0)
+        self.declare_parameter('kr', 0.01)
+        self.declare_parameter('kl', 0.01)
         # Get the parameters
-        r = self.get_parameter('wheel_radius').get_parameter_value().double_value
-        l = self.get_parameter('wheel_base').get_parameter_value().double_value
+        self.r = self.get_parameter('wheel_radius').get_parameter_value().double_value
+        self.l = self.get_parameter('wheel_base').get_parameter_value().double_value
         update_rate = self.get_parameter('localization_update_rate').get_parameter_value().double_value
         initial_pose = [self.get_parameter('initial_pose.x').get_parameter_value().double_value,
                         self.get_parameter('initial_pose.y').get_parameter_value().double_value,
                         self.get_parameter('initial_pose.theta').get_parameter_value().double_value]
+        self.kr = self.get_parameter('kr').get_parameter_value().double_value
+        self.kl = self.get_parameter('kl').get_parameter_value().double_value
 
         # Subscribers
-        self.create_subscription(Float32, 'wr', self.wr_callback, 10)
-        self.create_subscription(Float32, 'wl', self.wl_callback, 10)
+        self.create_subscription(Float32, 'VelocityEncR', self.wr_callback, qos_profile_sensor_data)
+        self.create_subscription(Float32, 'VelocityEncL', self.wl_callback, qos_profile_sensor_data)
         
         # Publishers
         self.odometry_publisher = self.create_publisher(Odometry, 'odom', 10)
@@ -37,14 +42,10 @@ class Localization(Node):
         self.create_timer(1.0/update_rate, self.localize_puzzlebot)
         
         # Node variables
-        self.puzzlebot_kinematic_model = puzzlebot_kinematics.get_puzzlebot_kinematic_model(r, l)
+        self.puzzlebot_kinematic_model = puzzlebot_kinematics.get_puzzlebot_kinematic_model(self.r, self.l)
         self.wheels_speeds = np.array([0., 0.])
         self.puzzlebot_pose = np.array(initial_pose)
         self.covariance_matrix = np.zeros((3, 3))
-        self.process_noise_covariance_matrix = np.array([[0.00000567, -0.0000065, -0.0000163],
-                                                         [-0.0000065, 0.00002631, 0.00003897],
-                                                         [-0.0000163, 0.00003897, 0.00011256]])
-
         self.last_time = self.get_clock().now()
 
         # Log the node start
@@ -66,11 +67,18 @@ class Localization(Node):
         # Get the current linearized puzzlebot model
         linearized_puzzlebot_model = puzzlebot_kinematics.get_linearized_puzzlebot_model_matrix(speeds[0], self.puzzlebot_pose[2], dt)
 
+        # Get the linearized puzzlebot input model
+        linearized_puzzlebot_input_model = puzzlebot_kinematics.get_linearized_puzzlebot_input_model_matrix(self.r, self.l, self.puzzlebot_pose[2], dt)
+
         # Decompose the linear and angular speeds into [vx, vy, w]
         decomposed_speeds = puzzlebot_kinematics.speeds_decomposer(speeds[0], speeds[1], self.puzzlebot_pose[2])
 
+        # Get the 2x2 variance matrix from encoder readings
+        wheel_variance = np.array([[self.kr*abs(self.wheels_speeds[0]), 0.0], [0.0, self.kl*abs(self.wheels_speeds[1])]])
+
         # Update the covariance matrix
-        self.covariance_matrix = linearized_puzzlebot_model @ self.covariance_matrix @ linearized_puzzlebot_model.T + self.process_noise_covariance_matrix
+        self.covariance_matrix = linearized_puzzlebot_model @ self.covariance_matrix @ linearized_puzzlebot_model.T + \
+                                linearized_puzzlebot_input_model @ wheel_variance @ linearized_puzzlebot_input_model.T
 
         # Update the pose [x, y, theta] based on [vx, vy, w] and dt
         self.puzzlebot_pose[0] += decomposed_speeds[0] * dt

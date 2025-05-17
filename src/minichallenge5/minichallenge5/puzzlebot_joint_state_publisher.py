@@ -1,4 +1,4 @@
-import minichallenge4.utils.puzzlebot_kinematics as puzzlebot_kinematics
+import minichallenge5.utils.puzzlebot_kinematics as puzzlebot_kinematics
 import numpy as np
 import rclpy
 
@@ -72,8 +72,8 @@ class PuzzlebotJointPublisher(Node):
         # Create a JointState message for the wheels angles
         joint_state_msg = JointState()
         joint_state_msg.header.stamp = self.get_clock().now().to_msg()
-        joint_state_msg.header.frame_id = 'base_footprint'
-        joint_state_msg.name = ['wheel_r_joint', 'wheel_l_joint']
+        joint_state_msg.header.frame_id =  f'{self.namespace}/base_footprint'.lstrip('/')
+        joint_state_msg.name = [f'{self.namespace}/wheel_right_joint'.lstrip('/'), f'{self.namespace}/wheel_left_joint'.lstrip('/')]
         joint_state_msg.position = [self.wheels_angles[0], self.wheels_angles[1]]
         joint_state_msg.velocity = [0.0, 0.0]
         joint_state_msg.effort = [0.0, 0.0]

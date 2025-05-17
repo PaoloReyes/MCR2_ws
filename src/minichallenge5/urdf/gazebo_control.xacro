@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:macro name="puzzlebot_control" params="prefix">
+    <gazebo>
+        <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+            <odom_publisher_frequency>50</odom_publisher_frequency>
+            <left_joint>${prefix}wheel_left_joint</left_joint>
+            <right_joint>${prefix}wheel_right_joint</right_joint>
+            <wheel_separation>0.19</wheel_separation>
+            <wheel_radius>0.05</wheel_radius>
+            <topic>${prefix}cmd_vel</topic>
+            <publish_odom>true</publish_odom>
+            <odom_topic>${prefix}gz_odom</odom_topic>
+            <frame_id>${prefix}odom</frame_id>
+            <child_frame_id>${prefix}base_footprint</child_frame_id>
+        </plugin>
+    </gazebo>
+</xacro:macro>
+</robot>
