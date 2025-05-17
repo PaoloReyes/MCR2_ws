@@ -28,6 +28,7 @@ robot1:
       w_max: 3.14
       side_open_angle: 0.5236
       front_open_angle: 0.3
+      target_open_angle: 0.5
 
 robot2:
   puzzlebot_localization:
@@ -59,3 +60,4 @@ robot2:
       w_max: 3.14
       side_open_angle: 0.5236
       front_open_angle: 0.3
+      target_open_angle: 0.5

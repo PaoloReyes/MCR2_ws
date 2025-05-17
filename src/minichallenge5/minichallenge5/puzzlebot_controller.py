@@ -31,6 +31,7 @@ class PuzzlebotController(Node):
         self.declare_parameter('w_max', 3.14)
         self.declare_parameter('side_open_angle', np.pi/6)
         self.declare_parameter('front_open_angle', np.pi/3)
+        self.declare_parameter('target_open_angle', np.pi/3)
 
         # Subscribers
         self.create_subscription(Pose2D, 'setpoint', self.setpoint_callback, 10)
@@ -60,6 +61,7 @@ class PuzzlebotController(Node):
         self.w_max = self.get_parameter('w_max').get_parameter_value().double_value
         self.side_open_angle = self.get_parameter('side_open_angle').get_parameter_value().double_value
         self.front_open_angle = self.get_parameter('front_open_angle').get_parameter_value().double_value
+        self.target_open_angle = self.get_parameter('target_open_angle').get_parameter_value().double_value
         self.robot_pose = Pose2D()
         self.robot_setpoint = Pose2D()
         self.closest_object_angle = 0.0
@@ -104,10 +106,21 @@ class PuzzlebotController(Node):
         # Clamp the closest object angle to be within [-pi, pi]
         self.closest_object_angle = np.atan2(np.sin(self.closest_object_angle), np.cos(self.closest_object_angle))
 
-        # Determine the controller mode based on the closest object distance
-        if closest_object_distance < self.following_walls_distance and self.controller_mode == 'p2p_controller':
-            self.following_walls_direction = np.random.choice(list(self.following_walls_directions.keys()))
-            self.controller_mode = 'following_walls'
+        # Calculate the angle error to face the target
+        theta_to_face_target_error = self._get_angle_error_to_face_target(self.robot_pose, self.robot_setpoint)
+        # Get the front region data
+        start_angle = theta_to_face_target_error - msg.angle_min - self.target_open_angle
+        end_angle = theta_to_face_target_error - msg.angle_min + self.target_open_angle
+        # Clamp the angles to be within [-pi, pi]
+        start_angle = np.atan2(np.sin(start_angle), np.cos(start_angle))
+        end_angle = np.atan2(np.sin(end_angle), np.cos(end_angle))
+        # Move the angles to the range of [0, 2*pi]
+        start_angle = self._symmetric_theta_shift(start_angle)
+        end_angle = self._symmetric_theta_shift(end_angle)
+        # Get the start and end indices for the front region
+        start_index, end_index = self._get_index_from_angle(start_angle, end_angle, msg.angle_increment)
+        # Get the front region closest object distance
+        min_target_region_distance = self._get_min_distance_from_region(lidar_readings, start_index, end_index, msg.range_min)
 
         # Get the side region start and end angles
         start_angle, end_angle = self._get_sides_start_end_angles(self.following_walls_direction, msg.angle_min, self.side_open_angle, self.side_open_angle)
@@ -119,6 +132,12 @@ class PuzzlebotController(Node):
         # Get the front region data
         start_angle = -msg.angle_min - self.front_open_angle
         end_angle = -msg.angle_min + self.front_open_angle
+        # Clamp the angles to be within [-pi, pi]
+        start_angle = np.atan2(np.sin(start_angle), np.cos(start_angle))
+        end_angle = np.atan2(np.sin(end_angle), np.cos(end_angle))
+        # Move the angles to the range of [0, 2*pi]
+        start_angle = self._symmetric_theta_shift(start_angle)
+        end_angle = self._symmetric_theta_shift(end_angle)
         # Get the start and end indices for the front region
         start_index, end_index = self._get_index_from_angle(start_angle, end_angle, msg.angle_increment)
         # Get the front region closest object distance
@@ -135,16 +154,17 @@ class PuzzlebotController(Node):
         start_index, end_index = self._get_index_from_angle(start_angle, end_angle, msg.angle_increment)
         # Get the min outside back region distance
         self.min_back_side_outside_region_distance = self._get_min_distance_outside_region(lidar_readings, start_index, end_index, msg.range_min)
-    
+
+        # Determine the controller mode 
+        if self.min_front_region_distance < self.following_walls_distance*1.5 and self.controller_mode == 'p2p_controller':
+            self.following_walls_direction = np.random.choice(list(self.following_walls_directions.keys()))
+            self.controller_mode = 'following_walls'
+        elif min_target_region_distance > self._get_euclidian_distance_between_poses(self.robot_pose, self.robot_setpoint) and self.controller_mode == 'following_walls':
+            self.controller_mode = 'p2p_controller'
+
     def controller_callback(self):
         # Calculate the distance to the setpoint
         distance_to_target = self._get_euclidian_distance_between_poses(self.robot_pose, self.robot_setpoint)
-        # Calculate the angle between the robot and the setpoint
-        angle_between_poses = np.atan2(self.robot_setpoint.y - self.robot_pose.y, self.robot_setpoint.x - self.robot_pose.x)
-        # Calculate the angle to face the target and the setpoint error
-        theta_to_face_target_error = angle_between_poses - self.robot_pose.theta
-        # Normalize the angle to be within [-pi, pi]
-        theta_to_face_target_error = np.atan2(np.sin(theta_to_face_target_error), np.cos(theta_to_face_target_error))
         
         # Create a Twist message to publish the robot velocity
         twist_msg = Twist()
@@ -195,6 +215,9 @@ class PuzzlebotController(Node):
                 twist_msg.linear.x = linear_speed
                 twist_msg.angular.z = angular_speed
             elif self.controller_mode == 'p2p_controller':
+                # Calculate the angle error to face the target
+                theta_to_face_target_error = self._get_angle_error_to_face_target(self.robot_pose, self.robot_setpoint)
+
                 # Perform orientation control on the move
                 linear_speed = self.p2p_v_Kp * distance_to_target
                 angular_speed = self.p2p_w_Kp * theta_to_face_target_error
@@ -274,6 +297,14 @@ class PuzzlebotController(Node):
 
         # Return the minimum distance from the valid readings
         return max(np.min(valid_readings), range_min)
+    
+    def _get_angle_error_to_face_target(self, robot_pose, target_pose):
+        # Calculate the angle between the robot and the setpoint
+        angle_between_poses = np.atan2(self.robot_setpoint.y - self.robot_pose.y, self.robot_setpoint.x - self.robot_pose.x)
+        # Calculate the angle to face the target and the setpoint error
+        theta_to_face_target_error = angle_between_poses - self.robot_pose.theta
+        # Return the normalized angle within [-pi, pi]
+        return np.atan2(np.sin(theta_to_face_target_error), np.cos(theta_to_face_target_error))
 
 def main():
     rclpy.init()
