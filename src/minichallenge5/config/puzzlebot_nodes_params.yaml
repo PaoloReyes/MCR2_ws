@@ -29,35 +29,37 @@ robot1:
       side_open_angle: 0.5236
       front_open_angle: 0.3
       target_open_angle: 0.5
+      controller_type: "BUG2"
 
-robot2:
-  puzzlebot_localization:
-    ros__parameters:
-      localization_update_rate: 50.0
-      initial_pose:
-        x: 1.75
-        y: 1.2
-        theta: 0.0
-      kr: 0.15
-      kl: 0.15
+# robot2:
+#   puzzlebot_localization:
+#     ros__parameters:
+#       localization_update_rate: 50.0
+#       initial_pose:
+#         x: -3.5
+#         y: 1.2
+#         theta: 0.0
+#       kr: 0.15
+#       kl: 0.15
 
-  puzzlebot_controller:
-    ros__parameters:
-      controller_update_rate: 50.0
-      distance_tolerance: 0.01
-      angular_tolerance: 0.017
-      angular_adjustment: 0.1745
-      following_walls_distance: 0.3
-      front_stop_distance: 0.3
-      lookahead_distance: 0.35
-      p2p_v_Kp: 0.8
-      p2p_w_Kp: 1.5
-      fw_w_Kp: 2.0
-      fw_e_Kp: 8.5
-      fw_linear_speed: 0.4
-      fw_outer_corner_angular_speed: 1.9
-      v_max: 0.4
-      w_max: 3.14
-      side_open_angle: 0.5236
-      front_open_angle: 0.3
-      target_open_angle: 0.5
+#   puzzlebot_controller:
+#     ros__parameters:
+#       controller_update_rate: 50.0
+#       distance_tolerance: 0.01
+#       angular_tolerance: 0.017
+#       angular_adjustment: 0.1745
+#       following_walls_distance: 0.3
+#       front_stop_distance: 0.3
+#       lookahead_distance: 0.35
+#       p2p_v_Kp: 0.8
+#       p2p_w_Kp: 1.5
+#       fw_w_Kp: 2.0
+#       fw_e_Kp: 8.5
+#       fw_linear_speed: 0.4
+#       fw_outer_corner_angular_speed: 1.9
+#       v_max: 0.4
+#       w_max: 3.14
+#       side_open_angle: 0.5236
+#       front_open_angle: 0.3
+#       target_open_angle: 0.5
+#       controller_type: "BUG0"

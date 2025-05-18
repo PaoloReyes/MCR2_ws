@@ -32,6 +32,7 @@ class PuzzlebotController(Node):
         self.declare_parameter('side_open_angle', np.pi/6)
         self.declare_parameter('front_open_angle', np.pi/3)
         self.declare_parameter('target_open_angle', np.pi/3)
+        self.declare_parameter('controller_type', "BUG0")
 
         # Subscribers
         self.create_subscription(Pose2D, 'setpoint', self.setpoint_callback, 10)
@@ -72,6 +73,9 @@ class PuzzlebotController(Node):
         self.min_front_region_distance = 0.0
         self.min_back_side_region_distance = 0.0
         self.min_back_side_outside_region_distance = 0.0
+        self.controller_type = self.get_parameter('controller_type').get_parameter_value().string_value
+        self.target_line = None
+        self.last_error_y = None
 
         # Log the node start
         self.get_logger().info('Puzzlebot Controller Node has been started.')
@@ -99,8 +103,6 @@ class PuzzlebotController(Node):
         # Get the lidar readings
         lidar_readings = np.array(msg.ranges)
 
-        # Get the closest object distance
-        closest_object_distance = np.min(lidar_readings)
         # Get the closest object angle
         self.closest_object_angle = msg.angle_min + np.argmin(lidar_readings)*msg.angle_increment
         # Clamp the closest object angle to be within [-pi, pi]
@@ -159,8 +161,21 @@ class PuzzlebotController(Node):
         if self.min_front_region_distance < self.following_walls_distance*1.5 and self.controller_mode == 'p2p_controller':
             self.following_walls_direction = np.random.choice(list(self.following_walls_directions.keys()))
             self.controller_mode = 'following_walls'
-        elif min_target_region_distance > self._get_euclidian_distance_between_poses(self.robot_pose, self.robot_setpoint) and self.controller_mode == 'following_walls':
-            self.controller_mode = 'p2p_controller'
+            m = (self.robot_setpoint.y-self.robot_pose.y)/(self.robot_setpoint.x-self.robot_pose.x)
+            b = self.robot_pose.y - m * self.robot_pose.x
+            self.target_line = lambda x : m*x + b
+            self.last_error_y = self.target_line(self.robot_pose.x) - self.robot_pose.y
+        else:
+            if (min_target_region_distance > self._get_euclidian_distance_between_poses(self.robot_pose, self.robot_setpoint) and \
+            self.controller_mode == 'following_walls' and self.controller_type == 'BUG0'):
+                self.controller_mode = 'p2p_controller'
+            elif self.controller_mode == 'following_walls' and self.controller_type == 'BUG2':
+                error_y = self.target_line(self.robot_pose.x) - self.robot_pose.y
+                if (self.last_error_y is not None and (error_y > 0 and self.last_error_y < 0) or (error_y < 0 and self.last_error_y > 0)):
+                    self.controller_mode = 'p2p_controller'
+                self.last_error_y = error_y
+            elif self.controller_type != 'BUG0' and self.controller_type != 'BUG2':
+                raise ValueError("Controller type must be 'BUG0' or 'BUG2'.")
 
     def controller_callback(self):
         # Calculate the distance to the setpoint
@@ -188,7 +203,6 @@ class PuzzlebotController(Node):
                     tangent_angle = angle_to_separate - np.pi/2
                 # Clamp the tangent angle to be within [-pi, pi]
                 tangent_angle = np.atan2(np.sin(tangent_angle), np.cos(tangent_angle))
-
                 # Perform wall-following control
                 # Calculate the linear speed
                 linear_speed = self.fw_linear_speed
@@ -197,8 +211,10 @@ class PuzzlebotController(Node):
                 elif self.min_front_region_distance < 2*self.front_stop_distance:
                     linear_speed /= 2
                 # Calculate the angular speed
-                angular_speed = self.fw_w_Kp * tangent_angle +\
-                                self.following_walls_directions[self.following_walls_direction] * self.fw_e_Kp * distance_to_wall_error
+                angular_speed = self.fw_w_Kp * tangent_angle
+                # If the robot is close to the wall tangent, start distance control
+                if abs(angle_to_separate - self.robot_pose.theta) < 1.5708:
+                    angular_speed += self.following_walls_directions[self.following_walls_direction] * self.fw_e_Kp * distance_to_wall_error
                 
                 # Perform a outer corner control algorithm if exists
                 if self.min_back_side_region_distance < self.lookahead_distance and self.min_back_side_outside_region_distance > self.lookahead_distance:
@@ -298,11 +314,11 @@ class PuzzlebotController(Node):
         # Return the minimum distance from the valid readings
         return max(np.min(valid_readings), range_min)
     
-    def _get_angle_error_to_face_target(self, robot_pose, target_pose):
+    def _get_angle_error_to_face_target(self, robot_pose, robot_setpoint):
         # Calculate the angle between the robot and the setpoint
-        angle_between_poses = np.atan2(self.robot_setpoint.y - self.robot_pose.y, self.robot_setpoint.x - self.robot_pose.x)
+        angle_between_poses = np.atan2(robot_setpoint.y - robot_pose.y, robot_setpoint.x - robot_pose.x)
         # Calculate the angle to face the target and the setpoint error
-        theta_to_face_target_error = angle_between_poses - self.robot_pose.theta
+        theta_to_face_target_error = angle_between_poses - robot_pose.theta
         # Return the normalized angle within [-pi, pi]
         return np.atan2(np.sin(theta_to_face_target_error), np.cos(theta_to_face_target_error))
 
